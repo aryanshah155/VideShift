@@ -1,0 +1,23 @@
+# Node / frontend
+node_modules/
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local data artifacts (dataset must be added manually by design)
+backend/data/tracks_features.csv
+backend/data/tracks_features.parquet
+backend/data/_runs/
+backend/data/_store/
+
+# Env
+.env
+kaggle.json
+
+# Runtime logs
+*.log
+ .freebuff
