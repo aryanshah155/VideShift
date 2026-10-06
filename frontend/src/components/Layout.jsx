@@ -4,6 +4,8 @@ export default function Layout({ children }) {
   const { pathname } = useLocation()
   const onResults = pathname.startsWith('/runs/')
   const runId = onResults ? pathname.split('/')[2] : null
+  const pill = (active) =>
+    `rounded-full px-4 py-1.5 transition ${active ? 'bg-panel text-accent border border-edge' : 'text-muted hover:text-zinc-100'}`
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-edge bg-base/80 backdrop-blur">
@@ -21,23 +23,20 @@ export default function Layout({ children }) {
             </span>
           </Link>
           <nav className="flex items-center gap-2 text-sm font-semibold">
-            <Link
-              to="/"
-              className={`rounded-full px-4 py-1.5 transition ${pathname === '/' ? 'bg-panel text-accent border border-edge' : 'text-muted hover:text-zinc-100'}`}
-            >
+            <Link to="/" className={pill(pathname === '/')}>
               Dashboard
+            </Link>
+            <Link to="/concepts" className={pill(pathname.startsWith('/concepts'))}>
+              Concepts
             </Link>
             {onResults && (
               <>
-                <Link
-                  to={`/runs/${runId}`}
-                  className={`rounded-full px-4 py-1.5 transition ${pathname.endsWith(runId) ? 'bg-panel text-accent border border-edge' : 'text-muted hover:text-zinc-100'}`}
-                >
+                <Link to={`/runs/${runId}`} className={pill(pathname.endsWith(runId))}>
                   Results
                 </Link>
                 <Link
                   to={`/runs/${runId}/tracks`}
-                  className={`rounded-full px-4 py-1.5 transition ${pathname.endsWith('/tracks') ? 'bg-panel text-accent border border-edge' : 'text-muted hover:text-zinc-100'}`}
+                  className={pill(pathname.endsWith('/tracks'))}
                 >
                   Tracks
                 </Link>

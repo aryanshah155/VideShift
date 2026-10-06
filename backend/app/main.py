@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     app.state.store_backend = backend
     from .pipeline.runner import RunManager
 
-    app.state.run_manager = RunManager(store)
+    app.state.run_manager = RunManager(store, backend=backend)
     yield
 
 

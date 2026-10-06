@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..pipeline import tracks as track_store
+from ..pipeline.ingest import dataset_profile
 from ..schemas import RunConfig, TrackPage
 
 router = APIRouter()
@@ -19,7 +20,10 @@ def _manager(request: Request):
 
 @router.post("")
 def create_run(request: Request, config: RunConfig):
-    cfg = config.normalized().model_dump()
+    # Mirror the Dashboard's dataset-derived min/max so a hand-crafted request
+    # cannot ask for a year window the dataset cannot satisfy.
+    profile = dataset_profile()
+    cfg = config.bounded(profile.get("year_min"), profile.get("year_max")).model_dump()
     run_id = _manager(request).start_run(cfg)
     return {"id": run_id, "state": "running"}
 
@@ -48,6 +52,20 @@ def run_results(request: Request, run_id: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Results file missing")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.get("/{run_id}/bloom")
+def run_bloom(request: Request, run_id: str, term: str = ""):
+    """Exp.6 in the UI: ask the run's Bloom filter about a search term."""
+    doc = _manager(request).get_status(run_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if doc.get("state") != "done":
+        raise HTTPException(status_code=409, detail=f"Run state is '{doc.get('state')}'")
+    verdict = track_store.bloom_lookup(run_id, term)
+    if verdict is None:
+        raise HTTPException(status_code=404, detail="Artist index unavailable for this run")
+    return verdict
 
 
 @router.get("/{run_id}/tracks", response_model=TrackPage)

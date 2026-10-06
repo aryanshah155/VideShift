@@ -89,12 +89,18 @@ class PandasEngine:
         def _fit(k: int) -> tuple[KMeans, np.ndarray, float | None]:
             km = KMeans(n_clusters=k, n_init=4, random_state=42)
             labels = km.fit_predict(X)
+            # Silhouette is O(n^2), so it is always scored on a bounded sample -
+            # skipping it above a row threshold would leave the headline quality
+            # metric empty on exactly the large datasets this project targets.
             sil = None
-            if len(X) <= 60_000:  # silhouette is O(n^2); cap the sample cost
+            if len(X) > 1 and k < len(X):
                 sample_idx = np.random.default_rng(42).choice(
                     len(X), size=min(8_000, len(X)), replace=False
                 )
-                sil = float(silhouette_score(X[sample_idx], labels[sample_idx]))
+                try:
+                    sil = float(silhouette_score(X[sample_idx], labels[sample_idx]))
+                except Exception:
+                    sil = None
             return km, labels, sil
 
         if config.find_best_k:

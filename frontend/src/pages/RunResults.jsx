@@ -18,6 +18,8 @@ import {
 import Layout from '../components/Layout.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import StageConsole from '../components/StageConsole.jsx'
+import Stat from '../components/Stat.jsx'
+import BdaSuite from '../components/BdaSuite.jsx'
 import { clusterColor } from '../components/ClusterBadge.jsx'
 import { api } from '../api/client.js'
 import { useRunPoll } from '../hooks/useRunPoll.js'
@@ -229,6 +231,9 @@ function ResultsView({ runId, status, results }) {
         </section>
       </div>
 
+      {/* Big Data Analytics suite: Exp.1-Exp.8 + stream processing */}
+      {results.bda && Object.keys(results.bda).length > 0 && <BdaSuite bda={results.bda} />}
+
       {/* Silhouette sweep */}
       {Object.keys(results.silhouette_by_k || {}).length > 0 && (
         <section className="card mb-6">
@@ -264,16 +269,6 @@ function ResultsView({ runId, status, results }) {
         </section>
       )}
     </Layout>
-  )
-}
-
-function Stat({ label, value, sub, accent }) {
-  return (
-    <div className="card !p-4">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
-      <p className={`stat-value mt-1 ${accent ? 'text-accent' : ''}`}>{value}</p>
-      {sub && <p className="text-xs text-muted">{sub}</p>}
-    </div>
   )
 }
 

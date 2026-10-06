@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard.jsx'
 import RunResults from './pages/RunResults.jsx'
 import TrackExplorer from './pages/TrackExplorer.jsx'
+import Concepts from './pages/Concepts.jsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -11,6 +12,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/concepts" element={<Concepts />} />
         <Route path="/runs/:runId" element={<RunResults />} />
         <Route path="/runs/:runId/tracks" element={<TrackExplorer />} />
         <Route path="*" element={<Navigate to="/" replace />} />

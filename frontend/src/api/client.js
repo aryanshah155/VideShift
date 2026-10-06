@@ -15,9 +15,12 @@ async function handle(res) {
 }
 
 export const api = {
-  datasetStatus: () => fetch(`${BASE}/dataset/status`).then(handle),
+  datasetStatus: (refresh = false) =>
+    fetch(`${BASE}/dataset/status${refresh ? '?refresh=true' : ''}`).then(handle),
   engineStatus: () => fetch(`${BASE}/engine`).then(handle),
   storeInfo: () => fetch(`${BASE}/store`).then(handle),
+  concepts: (runId) =>
+    fetch(`${BASE}/concepts${runId ? `?run_id=${encodeURIComponent(runId)}` : ''}`).then(handle),
   createRun: (config) =>
     fetch(`${BASE}/runs`, {
       method: 'POST',
@@ -38,5 +41,7 @@ export const api = {
     qs.set('page_size', params.pageSize || 50)
     return fetch(`${BASE}/runs/${id}/tracks?${qs}`).then(handle)
   },
+  bloomCheck: (id, term) =>
+    fetch(`${BASE}/runs/${id}/bloom?term=${encodeURIComponent(term || '')}`).then(handle),
   notebookUrl: (id) => `${BASE}/runs/${id}/notebook`,
 }

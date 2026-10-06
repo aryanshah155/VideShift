@@ -12,12 +12,33 @@ export default function TrackExplorer() {
   const [cluster, setCluster] = useState('')
   const [decade, setDecade] = useState('')
   const [results, setResults] = useState(null)
+  const [bloom, setBloom] = useState(null)
   const [error, setError] = useState(null)
   const pageSize = 50
 
   useEffect(() => {
     api.runResults(runId).then(setResults).catch(() => {})
   }, [runId])
+
+  // Exp.6 in the UI: the Bloom filter answers artist-membership in O(k).
+  useEffect(() => {
+    const term = search.trim()
+    if (term.length < 2) {
+      setBloom(null)
+      return undefined
+    }
+    let live = true
+    const timer = setTimeout(() => {
+      api
+        .bloomCheck(runId, term)
+        .then((v) => live && setBloom(v))
+        .catch(() => live && setBloom(null))
+    }, 300)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [runId, search])
 
   useEffect(() => {
     let live = true
@@ -93,6 +114,30 @@ export default function TrackExplorer() {
           ))}
         </select>
       </div>
+
+      {bloom && (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-edge/70 bg-panel px-3 py-2 text-xs"
+          title={bloom.note}
+        >
+          <span className="badge border-accent/40 text-accent">Exp.6 · Bloom pre-filter</span>
+          <span className="font-mono text-zinc-300">“{bloom.term}”</span>
+          <span className="text-muted">→</span>
+          {bloom.exact_artist_match ? (
+            <span className="text-accent">exact artist match</span>
+          ) : bloom.in_bloom ? (
+            <span className="text-amber-300">may be an artist (Bloom filters have no false negatives)</span>
+          ) : (
+            <span className="text-zinc-400">
+              not one of the {bloom.artists_indexed.toLocaleString()} indexed artist names
+            </span>
+          )}
+          <span className="ml-auto font-mono text-[10px] text-muted">
+            m={bloom.m_bits.toLocaleString()} · k={bloom.hashes} · FPR≈{bloom.theoretical_fpr} ·{' '}
+            {bloom.memory_kb} KB
+          </span>
+        </div>
+      )}
 
       {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 

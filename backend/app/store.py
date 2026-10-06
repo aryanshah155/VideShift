@@ -68,6 +68,15 @@ class JsonRunStore:
     def list(self, limit: int = 50) -> list[dict[str, Any]]:
         return list(reversed(self._read()))[:limit]
 
+    def delete(self, run_id: str) -> bool:
+        with self._lock:
+            docs = self._read()
+            kept = [d for d in docs if d.get("id") != run_id]
+            if len(kept) == len(docs):
+                return False
+            self._write(kept)
+        return True
+
 
 class MongoRunStore:
     """MongoDB-backed run store."""
@@ -94,6 +103,15 @@ class MongoRunStore:
         cur = self._col.find({}, {"_id": 0}).sort("$natural", -1).limit(limit)
         return list(cur)
 
+    def all_ids(self) -> list[dict[str, Any]]:
+        """Minimal projection of every document, for maintenance passes."""
+        cur = self._col.find({}, {"_id": 0, "id": 1, "state": 1, "created_at": 1})
+        return list(cur)
+
+    def delete(self, run_id: str) -> bool:
+        result = self._col.delete_one({"id": run_id})
+        return bool(result.deleted_count)
+
 
 def open_store() -> tuple[Any, str]:
     """Open the best available store. Returns (store, backend_name)."""
@@ -102,6 +120,38 @@ def open_store() -> tuple[Any, str]:
         store = MongoRunStore(settings.mongo_uri, settings.mongo_db)
         return store, "mongodb"
     except Exception:
-        base = Path(__file__).resolve().parent.parent / "data" / "_store"
-        store = JsonRunStore(base)
+        # Fall back inside the configured data dir, so tests that relocate
+        # VIBESHIFT_DATA_DIR never read or write the real run registry.
+        store = JsonRunStore(settings.data_dir / "_store")
         return store, "json-fallback"
+
+
+def stale_run_docs(store: Any, artifacts_dir: Path) -> list[dict[str, Any]]:
+    """Run documents whose per-run artifact directory is gone.
+
+    These appear when a run registry and its artifacts get separated - the usual
+    cause being test runs whose data directory was a temporary folder, or a run
+    deleted from disk. They only ever render as broken links in the UI.
+    """
+    rows: list[dict[str, Any]] = []
+    listed = (
+        store.all_ids()
+        if hasattr(store, "all_ids")
+        else [
+            {"id": d.get("id"), "state": d.get("state"), "created_at": d.get("created_at")}
+            for d in store.list(10_000)
+        ]
+    )
+    for doc in listed:
+        run_id = doc.get("id")
+        if not run_id:
+            continue
+        if not (artifacts_dir / run_id / "results.json").exists():
+            rows.append(
+                {
+                    "id": run_id,
+                    "state": doc.get("state"),
+                    "created_at": doc.get("created_at"),
+                }
+            )
+    return rows

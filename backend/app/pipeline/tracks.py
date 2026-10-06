@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -77,3 +78,76 @@ def delete_run_artifacts(run_id: str) -> None:
     import shutil
 
     shutil.rmtree(_runs_dir() / run_id, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------- #
+# Bloom pre-filter (Exp.6) - a live membership test over the artist vocabulary
+# --------------------------------------------------------------------------- #
+# The Parquet store has no index, so a substring search always scans. A Bloom
+# filter over the artist names cannot answer substring queries, but it *can* prove
+# that a term is not an artist at all, which is what the track explorer surfaces.
+
+
+@lru_cache(maxsize=8)
+def _artist_index(run_id: str, mtime: float):
+    """Build (and cache) a Bloom filter + normalized artist set for one run."""
+    import pandas as pd
+
+    from ..bda.bloom import BloomFilter
+
+    path = _runs_dir() / run_id / "tracks.parquet"
+    if not path.exists():
+        return None
+
+    df = pd.read_parquet(path, columns=["artists"])
+    names: set[str] = set()
+    for value in df["artists"].astype(str):
+        raw = value.strip().strip("[]").replace("'", "").replace('"', "")
+        for chunk in raw.replace(";", ",").split(","):
+            name = chunk.strip().lower()
+            if name and name != "nan":
+                names.add(name)
+    if not names:
+        return None
+
+    m = BloomFilter.optimal_m(len(names), 0.01)
+    k = BloomFilter.optimal_k(m, len(names))
+    bf = BloomFilter(m, k)
+    for name in names:
+        bf.add(name)
+    return {
+        "filter": bf,
+        "names": names,
+        "m": m,
+        "k": k,
+        "n": len(names),
+        "memory_kb": bf.memory_kb(),
+    }
+
+
+def bloom_lookup(run_id: str, term: str) -> dict[str, Any] | None:
+    """Ask the run's Bloom filter whether a term is a known artist name."""
+    path = _runs_dir() / run_id / "tracks.parquet"
+    if not path.exists():
+        return None
+    index = _artist_index(run_id, path.stat().st_mtime)
+    if not index:
+        return None
+
+    needle = (term or "").strip().lower()
+    in_bloom = bool(needle) and index["filter"].contains(needle)
+    return {
+        "term": term,
+        "in_bloom": in_bloom,
+        "exact_artist_match": needle in index["names"],
+        "artists_indexed": index["n"],
+        "m_bits": index["m"],
+        "hashes": index["k"],
+        "memory_kb": index["memory_kb"],
+        "theoretical_fpr": round(index["filter"].theoretical_fpr(), 6),
+        "note": (
+            "A Bloom filter can prove absence but never presence. 'definitely absent' "
+            "means the term is not one of the indexed artist names - track titles can "
+            "still contain it as a substring, so the scan is only skipped for artist matches."
+        ),
+    }

@@ -11,15 +11,26 @@ and a React dashboard — following the planning methodology of
 
 ## Features
 
-- **Dashboard** — dataset status, engine badge (PySpark vs pandas fallback), run configuration
-  (k, year range, feature toggles, best-k silhouette sweep, row sampling), live stage console
-  with per-stage timings, and run history.
+- **Dashboard** — dataset status (rows, columns, tracks-per-decade histogram), engine badge
+  (PySpark vs pandas fallback), run configuration (k, feature toggles, best-k silhouette sweep,
+  row sampling), live stage console with per-stage timings, and run history. The **Year from /
+  Year to** inputs take their `min`/`max` from the dataset's real year range, with quick buttons
+  for the full range and the 99%-of-corpus range plus a live estimate of how many tracks the
+  selected window covers.
 - **Results** — the vibe-shift heatmap (decade × cluster shares), cluster-profile heatmap,
   PCA scatter (2D projection), decade trend lines, cluster sizes, silhouette sweep, and the
-  execution benchmark card.
-- **Track explorer** — search + cluster/decade filters over every track's cluster assignment.
+  execution benchmark card, followed by the **Big Data Analytics suite**.
+- **Big Data Analytics suite** (core portion) — MapReduce job inspector, live MongoDB/NoSQL
+  console, and the statistics/visualization panels. Five further analyses (HDFS, Bloom filter,
+  network, streams, supervised ML) are implemented and executed on every run but tucked behind
+  an “additional analyses” toggle.
+- **Concepts page** — every technique mapped to the CSC702 lab manual experiment and course
+  outcome, each with the live number it produced in the selected run and the JSON path holding
+  its evidence.
+- **Track explorer** — search + cluster/decade filters over every track's cluster assignment,
+  with a live Bloom-filter membership verdict for the search term.
 - **Notebook export** — one-click section-wise `.ipynb` reproducing the Colab pipeline with all
-  the debugging fixes baked in, plus a markdown snapshot of the run's actual results.
+  the debugging fixes baked in, the BDA sections, and a markdown snapshot of the run's results.
 
 ## Architecture
 
@@ -34,17 +45,28 @@ vibeshift/
 │       ├── config.py           # env settings
 │       ├── schema.py           # dataset column schema
 │       ├── schemas.py          # API models
-│       ├── notebook_export.py  # .ipynb generator
-│       ├── store.py            # Mongo store + JSON fallback
-│       ├── routers/            # runs, dataset, notebook endpoints
+│       ├── notebook_export.py  # .ipynb generator (Colab pipeline + BDA sections)
+│       ├── store.py            # Mongo store + JSON fallback + stale-doc detection
+│       ├── routers/            # runs, dataset+concepts, notebook endpoints
 │       ├── pipeline/
-│       │   ├── ingest.py       # CSV/Parquet loading, dataset status
+│       │   ├── ingest.py       # CSV/Parquet loading, dataset status + year range
 │       │   ├── prepare.py      # cleaning, casting, decade, scaling
 │       │   ├── pandas_engine.py# single-node engine (sklearn)
 │       │   ├── spark_engine.py # PySpark MLlib engine
 │       │   ├── engines.py      # engine detection/selection
-│       │   ├── runner.py       # threaded job runner
-│       │   └── tracks.py       # per-run Parquet track store
+│       │   ├── runner.py       # threaded job runner (clustering + BDA stages)
+│       │   └── tracks.py       # per-run Parquet track store + Bloom lookup
+│       ├── bda/                # Big Data Analytics suite (one module per technique)
+│       │   ├── catalog.py      # concept registry + core-portion flags
+│       │   ├── mapreduce.py    # Exp.4/5  map/shuffle/combine/reduce runtime
+│       │   ├── nosql.py        # Exp.3    MongoDB console (read-only)
+│       │   ├── eda.py          # Exp.8    statistics, correlation, outliers
+│       │   ├── hdfs.py         # Exp.1    block/replica model + hdfs transcript
+│       │   ├── bloom.py        # Exp.6    Bloom filter + lab tables
+│       │   ├── graph.py        # Exp.7    similarity graph, communities, layouts
+│       │   ├── ml_models.py    # Exp.2    supervised ML, elbow, dendrogram
+│       │   └── streaming.py    # CO4      windows, watermark, drift detection
+│       ├── scripts/            # prune_runs.py maintenance tool
 │       └── tests/              # pytest suite
 └── frontend/
     └── src/                    # Vite + React 18 + Tailwind + Recharts
@@ -52,7 +74,8 @@ vibeshift/
 
 **API**: `POST /api/runs` · `GET /api/runs` · `GET /api/runs/{id}` ·
 `GET /api/runs/{id}/results` · `GET /api/runs/{id}/tracks?search&cluster&decade&page` ·
-`GET /api/runs/{id}/notebook` · `GET /api/dataset/status` · `GET /api/engine` · `GET /api/store`
+`GET /api/runs/{id}/bloom?term=` · `GET /api/runs/{id}/notebook` ·
+`GET /api/dataset/status` · `GET /api/concepts` · `GET /api/engine` · `GET /api/store`
 
 ## Quick start
 
@@ -93,7 +116,32 @@ npm run dev        # http://localhost:5173 (proxies /api to :8000)
 
 Open http://localhost:5173, confirm the dataset card says **Ready**, configure k / year range,
 and press **▶ Run pipeline**. The stage console shows ingest → clean → assemble → kmeans →
-pca → aggregate → benchmark live.
+pca → aggregate → benchmark → hdfs → mapreduce → bloom → graph → streaming → ml → nosql → eda.
+
+## Big Data Analytics mapping (CSC702 lab manual)
+
+Every analysis runs inside the same pipeline, on the same cleaned and clustered records, and
+reports its numbers into the run's `results.json` (`bda` block) and the UI.
+
+**Core portion of the mini-project:**
+
+| Experiment | Concept | Where it lives |
+|---|---|---|
+| Exp.3 | NoSQL with MongoDB — schemaless run documents, 26-command console, nested/array queries, `$group` pipeline | `bda/nosql.py`, `store.py` |
+| Exp.4 | MapReduce word count over track titles | `bda/mapreduce.py` |
+| Exp.5 | MapReduce aggregates (with combiner), map-side join, top-N sorting, inverted index search | `bda/mapreduce.py` |
+| Exp.8 | Data visualization — decade × cluster heatmap, PCA scatter, trends, correlation heatmap, outliers | `frontend/src/pages/RunResults.jsx`, `bda/eda.py` |
+
+**Additional analyses** (implemented and executed on every run, presented behind a toggle):
+Exp.1 HDFS block/replica model and `hdfs dfs` transcript · Exp.2 supervised era classification
+(RandomForest/DecisionTree/LogisticRegression on a 70/30 split), elbow + silhouette model
+selection, Ward dendrogram · Exp.6 Bloom filter (optimal sizing, lab ASCII/bit tables,
+search pre-filter) · Exp.7 similarity-network analysis with degree distribution, force and
+degree-ring layouts, label-propagation communities and modularity · CO4 event-time windows,
+watermark/late arrivals and change-point drift detection.
+
+`GET /api/concepts` returns the whole registry annotated with `primary: true/false` so the
+frontend can present the core three prominently without deleting anything.
 
 ## Engines: Spark vs pandas
 
@@ -116,7 +164,21 @@ cd backend
 
 Covers: cleaning/casting fixes (decimal years, malformed rows), feature-matrix standardization,
 full engine results contract (shares sum to 100%, silhouette bounds), API run lifecycle,
-track filters, notebook JSON validity (nbformat 4, all sections, fixes present).
+track filters, dataset year-range reporting, year-window clamping, notebook JSON validity
+(nbformat 4, all sections, fixes present), and one test per BDA analysis — HDFS block
+arithmetic, MapReduce job outputs and combiner savings, Bloom filter false-negative guarantee,
+graph metric consistency, stream windows/drift thresholds, supervised metrics, EDA correlation
+symmetry, and the core/additional concept split.
+
+Tests are isolated: the API fixture points `VIBESHIFT_DATA_DIR` at a temp directory **and**
+`VIBESHIFT_MONGO_DB` at `vibeshift_test`, so a test run can never leave broken entries in the
+app's real run history. If registry documents and artifacts ever do drift apart, clean them up
+with:
+
+```bash
+.venv/Scripts/python scripts/prune_runs.py           # dry run - lists stale documents
+.venv/Scripts/python scripts/prune_runs.py --apply   # delete documents with no artifacts
+```
 
 ## Notebook export
 
