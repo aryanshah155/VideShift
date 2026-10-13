@@ -49,6 +49,7 @@ def run_bda_analyses(
     store_backend: str = "json-fallback",
     run_id: str | None = None,
     k: int = 5,
+    cluster_labels: dict[int, str] | None = None,
     dataset_path: str | None = None,
     dataset_size_mb: float | None = None,
     dataset_rows: int | None = None,
@@ -88,7 +89,9 @@ def run_bda_analyses(
     # --- Exp.4 + Exp.5: MapReduce framework ------------------------------- #
     try:
         emit("mapreduce", "running map -> shuffle -> combine -> reduce jobs")
-        out["mapreduce"] = mapreduce.run_mapreduce(df, feature_cols)
+        out["mapreduce"] = mapreduce.run_mapreduce(
+            df, feature_cols, cluster_labels=cluster_labels
+        )
         jobs = out["mapreduce"]["jobs"]
         pairs = sum(j["stats"]["map_output_pairs"] for j in jobs)
         emit("mapreduce", f"{len(jobs)} jobs, {pairs:,} map output pairs")
@@ -111,7 +114,7 @@ def run_bda_analyses(
     # --- Exp.7: social network / graph mining ----------------------------- #
     try:
         emit("graph", "building k-NN similarity graph + communities")
-        out["graph"] = graph.run_sna(df, feature_cols)
+        out["graph"] = graph.run_sna(df, feature_cols, cluster_labels=cluster_labels)
         st = out["graph"]["stats"]
         emit("graph", f"{st['nodes']} nodes, {st['edges']} edges, {st['communities']} communities")
     except Exception as exc:  # noqa: BLE001

@@ -234,6 +234,7 @@ def _run_bda(
 ) -> dict[str, Any]:
     """Execute the BDA analyses, mirroring each one into the stage console."""
     from ..bda import STAGE_KEYS, run_bda_analyses
+    from . import labels
     from .ingest import dataset_path, dataset_profile
 
     bda_map = {f"[{key}]": key for key in STAGE_KEYS}
@@ -262,6 +263,9 @@ def _run_bda(
             store_backend=getattr(manager, "backend", "unknown"),
             run_id=doc["id"],
             k=cfg.k,
+            # Profile-derived names, so the BDA panels label clusters the same
+            # way the clustering results do.
+            cluster_labels=labels.label_map(results.get("clusters")),
             dataset_path=str(path),
             dataset_size_mb=size_mb,
             dataset_rows=profile.get("rows"),

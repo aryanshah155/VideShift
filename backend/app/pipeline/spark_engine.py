@@ -12,6 +12,7 @@ from typing import Any, Callable
 from ..schema import ALL_COLS, FEATURE_COLS
 from ..schemas import RunConfig
 from .base import stage_progress
+from .labels import label_clusters
 from .prepare import clean_dataframe, sample_dataframe
 
 
@@ -168,8 +169,6 @@ class SparkEngine:
     def _cluster_profiles(
         self, df_clustered: Any, feature_cols: list[str], F: Any
     ) -> list[dict[str, Any]]:
-        from .pandas_engine import _label_for
-
         sizes = df_clustered.groupBy("cluster").count().toPandas().set_index("cluster")["count"]
         means = df_clustered.groupBy("cluster").mean(*feature_cols).toPandas().set_index("cluster")
         total = int(sizes.sum())
@@ -184,10 +183,12 @@ class SparkEngine:
                     "cluster": int(cluster_id),
                     "size": int(sizes[cluster_id]),
                     "share_pct": round(100.0 * int(sizes[cluster_id]) / total, 2),
-                    "label": _label_for(int(cluster_id)),
+                    "label": "",
                     "means": clean_means,
                 }
             )
+        # Name each cluster from the profile it actually has (see labels.py).
+        label_clusters(profiles)
         return profiles
 
     def _pca_sample(self, spark: Any, df_pca: Any, F: Any, cap: int = 5_000) -> list[dict[str, Any]]:

@@ -18,27 +18,8 @@ from sklearn.metrics import silhouette_score
 from ..schema import FEATURE_COLS
 from ..schemas import RunConfig
 from .base import stage_progress
+from .labels import label_clusters
 from .prepare import clean_dataframe, sample_dataframe, to_feature_matrix
-
-CLUSTER_LABELS = {
-    0: "Acoustic / Organic",
-    1: "High-Energy Electronic",
-    2: "Vocal / Pop",
-    3: "Instrumental / Ambient",
-    4: "Rhythmic / Dance",
-    5: "Mellow / Low-Energy",
-    6: "Spoken / Lyrical",
-    7: "Bright / Upbeat",
-    8: "Dark / Intense",
-    9: "Experimental / Hybrid",
-    10: "Live / Raw",
-    11: "Studio / Polished",
-}
-
-
-def _label_for(cluster_id: int) -> str:
-    return CLUSTER_LABELS.get(cluster_id, f"Profile {cluster_id}")
-
 
 def _pure_python_groupby_mean(
     decade_vals: list[tuple[int, list[float]]],
@@ -189,11 +170,13 @@ class PandasEngine:
                     "cluster": int(cluster_id),
                     "size": int(len(g)),
                     "share_pct": round(100.0 * len(g) / len(df), 2),
-                    "label": _label_for(int(cluster_id)),
+                    "label": "",
                     "means": means,
                 }
             )
         profiles.sort(key=lambda pr: pr["cluster"])
+        # Name each cluster from the profile it actually has (see labels.py).
+        label_clusters(profiles)
         return decades, profiles
 
     def _pca_sample(

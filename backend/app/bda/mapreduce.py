@@ -351,6 +351,7 @@ def run_mapreduce(
     row_limit: int = 25_000,
     num_partitions: int = 4,
     top_n: int = 15,
+    cluster_labels: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     total_rows = int(len(df))
@@ -363,17 +364,12 @@ def run_mapreduce(
     records = sample.to_dict("records")
     cols = [c for c in feature_cols if c in df.columns]
 
-    # Cluster -> label lookup table for the map-side join.
-    labels: dict[int, str] = {}
+    # Cluster -> label lookup table for the map-side join. The labels come from
+    # the clustering engine (already derived from each cluster's profile).
+    labels: dict[int, str] = dict(cluster_labels or {})
     if "cluster" in df.columns:
-        try:
-            from ..pipeline.pandas_engine import _label_for
-
-            for cid in sorted(df["cluster"].dropna().unique()):
-                labels[int(cid)] = _label_for(int(cid))
-        except Exception:
-            for cid in sorted(df["cluster"].dropna().unique()):
-                labels[int(cid)] = f"Cluster {int(cid)}"
+        for cid in sorted(df["cluster"].dropna().unique()):
+            labels.setdefault(int(cid), f"Cluster {int(cid)}")
 
     jobs: list[dict[str, Any]] = []
     timings: dict[str, float] = {}

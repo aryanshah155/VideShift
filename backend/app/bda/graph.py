@@ -28,15 +28,6 @@ EXPERIMENT = "Exp.7 / CO5-LO5"
 TITLE = "Social network analysis: similarity graph, degrees, layouts, communities"
 
 
-def _label_for(cluster_id: int) -> str:
-    try:
-        from ..pipeline.pandas_engine import _label_for as fn
-
-        return fn(int(cluster_id))
-    except Exception:
-        return f"Profile {int(cluster_id)}"
-
-
 def _components(n: int, adj: list[set[int]]) -> list[list[int]]:
     seen = [False] * n
     comps: list[list[int]] = []
@@ -201,6 +192,7 @@ def run_sna(
     sample_n: int = 200,
     k_neighbors: int = 4,
     seed: int = 42,
+    cluster_labels: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     cols = [c for c in feature_cols if c in df.columns]
@@ -295,7 +287,9 @@ def run_sna(
                 "share_pct": round(100.0 * len(members) / n, 2),
                 "avg_degree": round(float(degrees[members].mean()), 2),
                 "dominant_cluster": dominant,
-                "dominant_cluster_label": _label_for(dominant),
+                "dominant_cluster_label": (cluster_labels or {}).get(
+                    int(dominant), f"Cluster {int(dominant)}"
+                ),
                 "dominant_share_pct": round(share, 2),
             }
         )

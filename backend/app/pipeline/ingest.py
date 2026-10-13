@@ -138,13 +138,21 @@ def dataset_profile(path: Path | None = None, refresh: bool = False) -> dict:
 
 
 def read_csv_safe(path: Path) -> pd.DataFrame:
-    """Fault-tolerant CSV read: quote/escape handling, malformed rows -> NaN."""
-    return pd.read_csv(
-        path,
-        low_memory=False,
-        quoting=3,  # QUOTE_NONE handled per-field; pandas still honors quotes
-        on_bad_lines="skip",
-    )
+    """Fault-tolerant read of the Kaggle dump.
+
+    Quoting stays at pandas' default (``QUOTE_MINIMAL``) on purpose: the corpus
+    quotes track titles and artist lists, and plenty of those strings contain
+    commas. A ``QUOTE_NONE``-style reader mis-files every such line as malformed
+    and silently skips it - that quietly dropped 342,473 of the 1,204,025 rows
+    (28% of the corpus) before this was caught. Only genuinely broken lines are
+    skipped now.
+    """
+    try:
+        return pd.read_csv(path, low_memory=False, on_bad_lines="skip")
+    except pd.errors.ParserError:
+        # A truncated/unterminated quote aborts the C parser outright. The python
+        # engine can skip the offending records instead of failing the whole load.
+        return pd.read_csv(path, engine="python", on_bad_lines="skip")
 
 
 def load_dataframe(progress_cb=None) -> tuple[pd.DataFrame, float, int]:
